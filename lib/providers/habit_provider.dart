@@ -5,22 +5,61 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/habit.dart';
 import '../services/firestore_service.dart';
 import '../services/notification_service.dart';
+import '../services/offline_sync_service.dart';
 
 class HabitProvider extends ChangeNotifier {
   final FirestoreService _firestoreService = FirestoreService();
   final NotificationService _notificationService = NotificationService();
+  final OfflineSyncService _offlineSync = OfflineSyncService();
+  
   List<Habit> _habits = [];
   bool _isLoading = true;
+  bool _isOnline = true;
   String? _userId;
   StreamSubscription? _habitsSubscription;
+  StreamSubscription? _connectivitySubscription;
 
   List<Habit> get habits => _habits.where((h) => !h.isArchived).toList();
   List<Habit> get archivedHabits => _habits.where((h) => h.isArchived).toList();
   bool get isLoading => _isLoading;
   bool get isSignedIn => _userId != null;
+  bool get isOnline => _isOnline;
+  int get pendingSyncCount => _offlineSync.pendingOperations.length;
 
   HabitProvider() {
+    _initializeOfflineSync();
     loadHabits();
+  }
+
+  Future<void> _initializeOfflineSync() async {
+    await _offlineSync.initialize();
+    _isOnline = _offlineSync.isOnline;
+    
+    // Listen to connectivity changes
+    _connectivitySubscription = _offlineSync.connectivityStream.listen(
+      (isOnline) async {
+        final wasOnline = _isOnline;
+        _isOnline = isOnline;
+        notifyListeners();
+
+        // Sync when coming back online
+        if (!wasOnline && isOnline && _userId != null) {
+          debugPrint('Connection restored - syncing pending operations...');
+          await _syncPendingOperations();
+        }
+      },
+    );
+  }
+
+  Future<void> _syncPendingOperations() async {
+    if (_userId == null) return;
+    
+    try {
+      await _firestoreService.syncPendingOperations(_userId!);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error syncing pending operations: $e');
+    }
   }
 
   // Initialize with user ID and start listening to Firestore
@@ -64,7 +103,15 @@ class HabitProvider extends ChangeNotifier {
   @override
   void dispose() {
     _habitsSubscription?.cancel();
+    _connectivitySubscription?.cancel();
     super.dispose();
+  }
+
+  // Manual sync trigger
+  Future<void> manualSync() async {
+    if (_userId != null && _isOnline) {
+      await _syncPendingOperations();
+    }
   }
 
   // Load habits from local storage (fallback)
@@ -122,12 +169,19 @@ class HabitProvider extends ChangeNotifier {
 
   // Add new habit
   Future<void> addHabit(Habit habit) async {
+    // Always add to local first
+    _habits.add(habit);
+    await _saveHabitsToLocal();
+    notifyListeners();
+
+    // Try to sync to Firestore if online and signed in
     if (_userId != null) {
-      await _firestoreService.addHabit(_userId!, habit);
-    } else {
-      _habits.add(habit);
-      await _saveHabitsToLocal();
-      notifyListeners();
+      try {
+        await _firestoreService.addHabit(_userId!, habit);
+      } catch (e) {
+        debugPrint('Failed to add habit to Firestore (will sync later): $e');
+        // Operation is already queued by FirestoreService
+      }
     }
     
     // Schedule notification if reminder time is set
@@ -146,14 +200,21 @@ class HabitProvider extends ChangeNotifier {
     // Cancel old notifications
     await _notificationService.cancelHabitReminder(updatedHabit);
     
+    // Always update local first
+    final index = _habits.indexWhere((h) => h.id == updatedHabit.id);
+    if (index != -1) {
+      _habits[index] = updatedHabit;
+      await _saveHabitsToLocal();
+      notifyListeners();
+    }
+
+    // Try to sync to Firestore if online and signed in
     if (_userId != null) {
-      await _firestoreService.updateHabit(_userId!, updatedHabit);
-    } else {
-      final index = _habits.indexWhere((h) => h.id == updatedHabit.id);
-      if (index != -1) {
-        _habits[index] = updatedHabit;
-        await _saveHabitsToLocal();
-        notifyListeners();
+      try {
+        await _firestoreService.updateHabit(_userId!, updatedHabit);
+      } catch (e) {
+        debugPrint('Failed to update habit in Firestore (will sync later): $e');
+        // Operation is already queued by FirestoreService
       }
     }
     
@@ -175,12 +236,19 @@ class HabitProvider extends ChangeNotifier {
     // Cancel notifications for this habit
     await _notificationService.cancelHabitReminder(habit);
     
+    // Always delete from local first
+    _habits.removeWhere((h) => h.id == habitId);
+    await _saveHabitsToLocal();
+    notifyListeners();
+
+    // Try to sync to Firestore if online and signed in
     if (_userId != null) {
-      await _firestoreService.deleteHabit(_userId!, habitId);
-    } else {
-      _habits.removeWhere((h) => h.id == habitId);
-      await _saveHabitsToLocal();
-      notifyListeners();
+      try {
+        await _firestoreService.deleteHabit(_userId!, habitId);
+      } catch (e) {
+        debugPrint('Failed to delete habit from Firestore (will sync later): $e');
+        // Operation is already queued by FirestoreService
+      }
     }
   }
 
@@ -189,11 +257,18 @@ class HabitProvider extends ChangeNotifier {
     final habit = _habits.firstWhere((h) => h.id == habitId);
     habit.toggleToday();
     
+    // Always update local first
+    await _saveHabitsToLocal();
+    notifyListeners();
+
+    // Try to sync to Firestore if online and signed in
     if (_userId != null) {
-      await _firestoreService.updateHabit(_userId!, habit);
-    } else {
-      await _saveHabitsToLocal();
-      notifyListeners();
+      try {
+        await _firestoreService.updateHabit(_userId!, habit);
+      } catch (e) {
+        debugPrint('Failed to update habit in Firestore (will sync later): $e');
+        // Operation is already queued by FirestoreService
+      }
     }
   }
 
@@ -203,12 +278,18 @@ class HabitProvider extends ChangeNotifier {
     if (index != -1) {
       final updatedHabit = _habits[index].copyWith(isArchived: true);
       
+      // Always update local first
+      _habits[index] = updatedHabit;
+      await _saveHabitsToLocal();
+      notifyListeners();
+
+      // Try to sync to Firestore if online and signed in
       if (_userId != null) {
-        await _firestoreService.updateHabit(_userId!, updatedHabit);
-      } else {
-        _habits[index] = updatedHabit;
-        await _saveHabitsToLocal();
-        notifyListeners();
+        try {
+          await _firestoreService.updateHabit(_userId!, updatedHabit);
+        } catch (e) {
+          debugPrint('Failed to archive habit in Firestore (will sync later): $e');
+        }
       }
     }
   }
@@ -219,12 +300,18 @@ class HabitProvider extends ChangeNotifier {
     if (index != -1) {
       final updatedHabit = _habits[index].copyWith(isArchived: false);
       
+      // Always update local first
+      _habits[index] = updatedHabit;
+      await _saveHabitsToLocal();
+      notifyListeners();
+
+      // Try to sync to Firestore if online and signed in
       if (_userId != null) {
-        await _firestoreService.updateHabit(_userId!, updatedHabit);
-      } else {
-        _habits[index] = updatedHabit;
-        await _saveHabitsToLocal();
-        notifyListeners();
+        try {
+          await _firestoreService.updateHabit(_userId!, updatedHabit);
+        } catch (e) {
+          debugPrint('Failed to unarchive habit in Firestore (will sync later): $e');
+        }
       }
     }
   }
