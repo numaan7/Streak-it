@@ -75,14 +75,22 @@ class HabitProvider extends ChangeNotifier {
 
   // Update existing habit
   Future<void> updateHabit(Habit updatedHabit) async {
+    debugPrint('✏️ Updating habit: ${updatedHabit.name} (ID: ${updatedHabit.id})');
+    
     // Cancel old notifications
     await _notificationService.cancelHabitReminder(updatedHabit);
     
     final index = _habits.indexWhere((h) => h.id == updatedHabit.id);
+    debugPrint('📍 Found habit at index: $index');
+    
     if (index != -1) {
       _habits[index] = updatedHabit;
       await _saveHabitsToLocal();
+      debugPrint('💾 Saved updated habit to local storage');
       notifyListeners();
+      debugPrint('🔔 Notified listeners');
+    } else {
+      debugPrint('❌ Habit not found in list!');
     }
     
     // Schedule new notification if reminder time is set
@@ -98,14 +106,27 @@ class HabitProvider extends ChangeNotifier {
 
   // Delete habit
   Future<void> deleteHabit(String habitId) async {
-    final habit = _habits.firstWhere((h) => h.id == habitId);
+    debugPrint('🗑️ Deleting habit with ID: $habitId');
+    debugPrint('📊 Habits before delete: ${_habits.length}');
     
-    // Cancel notifications for this habit
-    await _notificationService.cancelHabitReminder(habit);
-    
-    _habits.removeWhere((h) => h.id == habitId);
-    await _saveHabitsToLocal();
-    notifyListeners();
+    try {
+      final habit = _habits.firstWhere((h) => h.id == habitId);
+      debugPrint('✅ Found habit to delete: ${habit.name}');
+      
+      // Cancel notifications for this habit
+      await _notificationService.cancelHabitReminder(habit);
+      
+      _habits.removeWhere((h) => h.id == habitId);
+      debugPrint('📊 Habits after delete: ${_habits.length}');
+      
+      await _saveHabitsToLocal();
+      debugPrint('💾 Saved to local storage');
+      
+      notifyListeners();
+      debugPrint('🔔 Notified listeners');
+    } catch (e) {
+      debugPrint('❌ Error deleting habit: $e');
+    }
   }
 
   // Toggle habit completion for today
