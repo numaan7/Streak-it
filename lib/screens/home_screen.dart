@@ -234,10 +234,15 @@ class HomeScreen extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.archive),
               title: const Text('Archive'),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
-                Provider.of<HabitProvider>(context, listen: false)
+                await Provider.of<HabitProvider>(context, listen: false)
                     .archiveHabit(habit.id);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Habit archived!')),
+                  );
+                }
               },
             ),
             ListTile(
@@ -266,10 +271,15 @@ class HomeScreen extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              Provider.of<HabitProvider>(context, listen: false)
-                  .deleteHabit(habit.id);
+            onPressed: () async {
               Navigator.pop(context);
+              await Provider.of<HabitProvider>(context, listen: false)
+                  .deleteHabit(habit.id);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Deleted "${habit.name}"')),
+                );
+              }
             },
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),

@@ -475,7 +475,7 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
     }
   }
 
-  void _saveHabit() {
+  Future<void> _saveHabit() async {
     if (_formKey.currentState!.validate()) {
       // Validate specific days selection
       if (_repeatOption == 'specific_days' && _selectedDays.isEmpty) {
@@ -505,7 +505,13 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
           reminderTime: _reminderTime,
           showMorningReminder: _showMorningReminder,
         );
-        provider.updateHabit(updatedHabit);
+        await provider.updateHabit(updatedHabit);
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Habit updated successfully!')),
+          );
+        }
       } else {
         // Create new habit
         final newHabit = Habit(
@@ -521,10 +527,18 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
           reminderTime: _reminderTime,
           showMorningReminder: _showMorningReminder,
         );
-        provider.addHabit(newHabit);
+        await provider.addHabit(newHabit);
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Habit added successfully!')),
+          );
+        }
       }
       
-      Navigator.pop(context);
+      if (context.mounted) {
+        Navigator.pop(context);
+      }
     }
   }
 }
