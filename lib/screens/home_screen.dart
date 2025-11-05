@@ -59,49 +59,6 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ),
                   actions: [
-                    // Online/Offline indicator with sync button
-                    if (!provider.isOnline || provider.pendingSyncCount > 0)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: IconButton(
-                          icon: Badge(
-                            label: provider.pendingSyncCount > 0
-                                ? Text('${provider.pendingSyncCount}')
-                                : null,
-                            isLabelVisible: provider.pendingSyncCount > 0,
-                            child: Icon(
-                              provider.isOnline
-                                  ? Icons.cloud_done
-                                  : Icons.cloud_off,
-                              color: provider.isOnline
-                                  ? Colors.green
-                                  : Colors.orange,
-                            ),
-                          ),
-                          tooltip: provider.isOnline
-                              ? 'Online - ${provider.pendingSyncCount} pending'
-                              : 'Offline mode',
-                          onPressed: provider.isOnline && provider.pendingSyncCount > 0
-                              ? () async {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Syncing...'),
-                                      duration: Duration(seconds: 1),
-                                    ),
-                                  );
-                                  await provider.manualSync();
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Sync completed!'),
-                                        duration: Duration(seconds: 2),
-                                      ),
-                                    );
-                                  }
-                                }
-                              : null,
-                        ),
-                      ),
                     IconButton(
                       icon: const Icon(Icons.calendar_view_week_outlined),
                       tooltip: 'Weekly Review',

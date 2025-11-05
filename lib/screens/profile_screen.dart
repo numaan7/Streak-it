@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../services/auth_service.dart';
 import '../providers/habit_provider.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -9,8 +8,6 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final authService = AuthService();
-    final user = authService.currentUser;
 
     return Scaffold(
       appBar: AppBar(
@@ -47,21 +44,16 @@ class ProfileScreen extends StatelessWidget {
               child: Column(
                 children: [
                   // Profile Picture
-                  CircleAvatar(
+                  const CircleAvatar(
                     radius: 50,
-                    backgroundImage: user?.photoURL != null
-                        ? NetworkImage(user!.photoURL!)
-                        : null,
-                    child: user?.photoURL == null
-                        ? const Icon(Icons.person, size: 50)
-                        : null,
+                    child: Icon(Icons.person, size: 50),
                   ),
                   const SizedBox(height: 16),
                   
                   // User Name
-                  Text(
-                    user?.displayName ?? 'Guest User',
-                    style: const TextStyle(
+                  const Text(
+                    'Streak It User',
+                    style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
@@ -69,9 +61,9 @@ class ProfileScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   
-                  // User Email
+                  // Storage Info
                   Text(
-                    user?.email ?? 'Not signed in',
+                    'All data stored locally',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.white.withOpacity(0.9),
@@ -115,118 +107,92 @@ class ProfileScreen extends StatelessWidget {
             // Settings Options
             _buildSettingsOption(
               context,
-              'Sync Status',
-              user != null ? 'Synced with Cloud' : 'Local Only',
-              Icons.cloud_done,
+              'Storage Mode',
+              'Offline Only - Local Storage',
+              Icons.storage,
               () {},
             ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
             
             const SizedBox(height: 12),
 
-            if (user != null) ...[
-              _buildSettingsOption(
-                context,
-                'Account',
-                'Manage your account',
-                Icons.person_outline,
-                () {},
-              ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
-              
-              const SizedBox(height: 12),
-            ],
-
             _buildSettingsOption(
               context,
               'About',
-              'Version 1.0.0',
+              'Version 1.0.0 - Offline Mode',
               Icons.info_outline,
               () {
                 showAboutDialog(
                   context: context,
                   applicationName: 'Streak it',
                   applicationVersion: '1.0.0',
-                  applicationLegalese: 'Vibe check your habits\n\n© 2025 Numaan',
+                  applicationLegalese: 'Vibe check your habits\n\nOffline-only version\n© 2025 Numaan',
                   applicationIcon: const Text('🔥', style: TextStyle(fontSize: 40)),
                 );
               },
-            ).animate().fadeIn(delay: 400.ms, duration: 400.ms),
+            ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
             
             const SizedBox(height: 32),
 
-            // Sign Out / Sign In Button
-            if (user != null)
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton.icon(
-                  onPressed: () async {
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Sign Out'),
-                        content: const Text('Are you sure you want to sign out?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            child: const Text('Sign Out'),
-                          ),
-                        ],
-                      ),
-                    );
+            // Clear Data Button
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Clear All Data'),
+                      content: const Text('Are you sure you want to delete all your habits? This action cannot be undone.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          style: TextButton.styleFrom(foregroundColor: Colors.red),
+                          child: const Text('Delete All'),
+                        ),
+                      ],
+                    ),
+                  );
 
-                    if (confirmed == true && context.mounted) {
-                      await authService.signOut();
-                      if (context.mounted) {
-                        Navigator.pushReplacementNamed(context, '/login');
-                      }
+                  if (confirmed == true && context.mounted) {
+                    final provider = Provider.of<HabitProvider>(context, listen: false);
+                    // Clear all habits
+                    for (var habit in List.from(provider.habits)) {
+                      await provider.deleteHabit(habit.id);
                     }
-                  },
-                  icon: const Icon(Icons.logout),
-                  label: const Text(
-                    'Sign Out',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                ),
-              ).animate().fadeIn(delay: 500.ms, duration: 400.ms)
-            else
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pushReplacementNamed(context, '/login');
-                  },
-                  icon: const Icon(Icons.login),
-                  label: const Text(
-                    'Sign In',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
+                    for (var habit in List.from(provider.archivedHabits)) {
+                      await provider.deleteHabit(habit.id);
+                    }
+                    
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('All data cleared!')),
+                      );
+                      Navigator.pop(context);
+                    }
+                  }
+                },
+                icon: const Icon(Icons.delete_forever),
+                label: const Text(
+                  'Clear All Data',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-              ).animate().fadeIn(delay: 500.ms, duration: 400.ms),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  side: const BorderSide(color: Colors.red),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ).animate().fadeIn(delay: 400.ms, duration: 400.ms),
           ],
         ),
       ),
