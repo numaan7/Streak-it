@@ -1,167 +1,172 @@
-# Streak it 🔥
+# Streak it
 
-**Vibe check your habits.**
+**Vibe check your habits** 🔥
 
-A beautiful and energizing habit tracking app built with Flutter, designed to help you build and maintain positive habits with streak tracking, statistics, and a clean, modern UI.
+A beautiful, modern habit tracking app built with Flutter that helps you build and maintain positive habits through streak tracking and engaging visualizations.
 
-## Features
+## ✨ Features
 
-### 🎨 Core Features
-✨ **Beautiful UI** - Modern, clean interface with smooth animations  
-🎯 **Habit Tracking** - Create and track daily habits with custom emojis and colors  
-🔥 **Streak Tracking** - See your current streak and longest streak for each habit  
-📊 **Statistics** - View detailed statistics and completion rates  
-📈 **Progress Charts** - Visualize your weekly habit completions  
-🌓 **Dark Mode** - Automatic dark/light theme support
+### Core Features
+- **Habit Tracking**: Create and manage your daily habits
+- **Streak Counting**: Track your current and longest streaks
+- **Visual Progress**: Beautiful activity calendar showing your completion history
+- **Statistics Dashboard**: View your momentum with active streaks, total days, and completion rates
+- **Weekly Charts**: Visualize your progress over the last 7 days
 
-### 🚀 New Features
-📂 **Habit Categories** - Organize habits into 8 categories (Health, Mindfulness, Productivity, etc.)  
-🏆 **Achievements** - Unlock badges for milestones (3-day, 7-day, 30-day, 100-day streaks)  
-💭 **Daily Motivation** - Inspirational quotes to keep you motivated  
-📝 **Habit Notes** - Add notes to your habits for better tracking (coming soon)
+### UI/UX
+- **Dark Theme**: Sleek, modern dark interface
+- **Color Customization**: Choose from 12 vibrant colors for each habit
+- **Icon Library**: 20+ icons to personalize your habits
+- **Smooth Animations**: Delightful micro-interactions and transitions
+- **Responsive Design**: Works beautifully on all screen sizes
 
-### ☁️ Cloud Features
-🔐 **Google Authentication** - Sign in with your Google account  
-☁️ **Cloud Sync** - Sync your habits across all devices with Firestore  
-💾 **Offline Support** - Works offline with local storage, syncs when online  
-👤 **User Profiles** - Personalized experience with profile management
+### Data Management
+- **Local Storage**: Your data stays on your device
+- **Persistent State**: All habits and progress are saved automatically
+- **Quick Actions**: Toggle habit completion with a single tap
 
-## Screenshots
-
-> Add screenshots here once the app is running
-
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
-
-- Flutter SDK (3.0.0 or higher)
+- Flutter SDK (>=3.2.0)
 - Dart SDK
-- Android Studio / Xcode (for mobile development)
-- VS Code or Android Studio
+- Android Studio / VS Code with Flutter extensions
+- iOS Simulator or Android Emulator (or physical device)
 
 ### Installation
 
-1. Clone the repository:
-```bash
-git clone https://github.com/numaan7/Streak-it.git
-cd Streak-it
-```
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd Streak-it
+   ```
 
-2. Install dependencies:
-```bash
-flutter pub get
-```
+2. **Install dependencies**
+   ```bash
+   flutter pub get
+   ```
 
-3. **Set up Firebase** (Required for authentication and cloud sync):
-   - Follow the detailed setup guide in [FIREBASE_SETUP.md](FIREBASE_SETUP.md)
-   - Configure your Firebase project and update `lib/firebase_options.dart`
-   - Enable Google Sign-In in Firebase Console
-   - Set up Cloud Firestore
+3. **Run the app**
+   ```bash
+   flutter run
+   ```
 
-4. Run the app:
-```bash
-flutter run
-```
-
-> **Note**: The app will work without Firebase configuration, but you'll only be able to use it without signing in (local storage only).
-
-## Project Structure
+## 📱 App Structure
 
 ```
 lib/
-├── main.dart                    # App entry point with Firebase init
-├── firebase_options.dart        # Firebase configuration
+├── main.dart                 # App entry point
 ├── models/
-│   └── habit.dart              # Habit data model
+│   └── habit.dart           # Habit data model
 ├── providers/
-│   └── habit_provider.dart     # State management with Firestore sync
-├── services/
-│   ├── auth_service.dart       # Google authentication
-│   └── firestore_service.dart  # Cloud Firestore operations
+│   └── habit_provider.dart  # State management
 ├── screens/
-│   ├── home_screen.dart        # Main dashboard
-│   ├── login_screen.dart       # Google sign-in
-│   ├── profile_screen.dart     # User profile & settings
-│   ├── add_habit_screen.dart   # Create/edit habits
-│   └── statistics_screen.dart  # Stats and charts
-└── widgets/
-    ├── habit_card.dart         # Habit list item
-    └── stats_overview.dart     # Overview stats card
+│   ├── home_screen.dart     # Main screen
+│   ├── add_habit_screen.dart # Create new habit
+│   └── habit_detail_screen.dart # Habit statistics & details
+├── widgets/
+│   ├── habit_card.dart      # Habit list item
+│   └── streak_stats_card.dart # Stats display
+├── services/
+│   └── storage_service.dart # Local data persistence
+└── utils/
+    └── app_theme.dart       # Colors, theme, constants
 ```
 
-## Dependencies
+## 🎨 Customization
 
-### Core
-- **provider** - State management
-- **shared_preferences** - Local data persistence
-- **uuid** - Unique IDs for habits
+### Adding New Colors
+Edit `lib/utils/app_theme.dart` and add colors to the `habitColors` list:
 
-### Firebase
-- **firebase_core** - Firebase initialization
-- **firebase_auth** - Google authentication
-- **cloud_firestore** - Cloud database
-- **google_sign_in** - Google sign-in integration
+```dart
+static const List<Color> habitColors = [
+  Color(0xFFYourColor),
+  // ... more colors
+];
+```
 
-### UI & Visualization
-- **google_fonts** - Custom typography
-- **flutter_animate** - Smooth animations
-- **fl_chart** - Charts and graphs
-- **intl** - Date formatting
+### Adding New Icons
+Edit `lib/screens/add_habit_screen.dart` and add icons to `_availableIcons`:
 
-## How to Use
+```dart
+final List<IconData> _availableIcons = [
+  Icons.your_icon,
+  // ... more icons
+];
+```
 
-### Getting Started
-1. **Sign In**: Sign in with your Google account for cloud sync, or continue without signing in for local-only storage
-2. **Create a Habit**: Tap the "Add Habit" button and customize:
-   - Choose an emoji from 24 options
-   - Select a color from 10 vibrant options
-   - Pick a category (Health, Mindfulness, Productivity, etc.)
-   - Add a name and optional description
-3. **Track Daily**: Tap on a habit card to mark it as completed for today
-4. **View Stats**: Check the statistics screen to see your progress, completion rates, and weekly charts
-5. **Achievements**: Unlock badges for streak milestones and habit counts
-6. **Daily Motivation**: Get inspired by daily motivational quotes
-7. **Manage Habits**: Long press on a habit to edit, archive, or delete it
-8. **Profile**: Access your profile to view stats, manage account, and sign out
+## 📦 Dependencies
 
-## Features in Detail
+- **provider**: State management
+- **shared_preferences**: Local data storage
+- **fl_chart**: Beautiful charts and graphs
+- **flutter_animate**: Smooth animations
+- **google_fonts**: Typography
+- **intl**: Date formatting
 
-### Habit Creation
-- Choose from 24 different emojis
-- Select from 10 vibrant colors
-- Add a name and optional description
-- Automatic streak calculation
+## 🎯 Key Features Explained
 
-### Streak Tracking
-- Current streak shows consecutive days completed
-- Longest streak tracks your personal best
-- Visual indicators for active streaks
-- Automatic streak calculation
+### Streak Calculation
+The app calculates streaks intelligently:
+- **Current Streak**: Counts consecutive days including today/yesterday
+- **Longest Streak**: Tracks your best performance ever
+- **Completion Rate**: Shows your success rate over the last 30 days
+
+### Activity Calendar
+- Shows 42 days (6 weeks) of activity
+- Completed days are highlighted in your habit's color
+- Today's date is outlined for easy reference
 
 ### Statistics
-- Overall completion rate across all habits
-- Per-habit statistics with current and best streaks
-- Weekly bar chart showing daily completions
-- Completion percentage for the last 30 days
+- **Active Streaks**: Number of habits with active streaks
+- **Total Days**: Sum of all current streak days
+- **Today's Progress**: Percentage of habits completed today
 
-## Contributing
+## 🛠️ Building for Production
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+### Android
+```bash
+flutter build apk --release
+# or for app bundle
+flutter build appbundle --release
+```
 
-## License
+### iOS
+```bash
+flutter build ios --release
+```
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+## 🐛 Known Issues & Limitations
 
-## Author
+- No cloud sync (local storage only)
+- No reminders/notifications yet
+- No habit editing (must delete and recreate)
+- No data export/import
 
-**Numaan**  
-GitHub: [@numaan7](https://github.com/numaan7)
+## 🚀 Future Enhancements
 
-## Acknowledgments
+- [ ] Push notifications for daily reminders
+- [ ] Cloud backup and sync
+- [ ] Habit editing functionality
+- [ ] Data export (CSV/JSON)
+- [ ] Custom frequency patterns
+- [ ] Achievement badges
+- [ ] Social features (share progress)
+- [ ] Widget support
+- [ ] More chart types
 
-- Inspired by Momentum: Energising Habits
-- Built with Flutter and love ❤️
+## 🤝 Contributing
+
+Contributions, issues, and feature requests are welcome! Feel free to check the issues page.
+
+## 📄 License
+
+This project is open source and available under the MIT License.
+
+## 👨‍💻 Author
+
+Built with ❤️ using Flutter
 
 ---
 
-**Streak it** - Vibe check your habits! 🎯🔥
+**Vibe check your habits and build momentum every day!** 🚀✨

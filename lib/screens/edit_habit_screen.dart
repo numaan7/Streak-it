@@ -4,21 +4,26 @@ import '../models/habit.dart';
 import '../providers/habit_provider.dart';
 import '../utils/app_theme.dart';
 
-class AddHabitScreen extends StatefulWidget {
-  const AddHabitScreen({super.key});
+class EditHabitScreen extends StatefulWidget {
+  final Habit habit;
+
+  const EditHabitScreen({
+    super.key,
+    required this.habit,
+  });
 
   @override
-  State<AddHabitScreen> createState() => _AddHabitScreenState();
+  State<EditHabitScreen> createState() => _EditHabitScreenState();
 }
 
-class _AddHabitScreenState extends State<AddHabitScreen> {
+class _EditHabitScreenState extends State<EditHabitScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _descriptionController = TextEditingController();
+  late TextEditingController _nameController;
+  late TextEditingController _descriptionController;
   
-  Color _selectedColor = AppColors.habitColors[0];
-  IconData _selectedIcon = Icons.favorite;
-  FrequencyType _selectedFrequency = FrequencyType.daily;
+  late Color _selectedColor;
+  late IconData _selectedIcon;
+  late FrequencyType _selectedFrequency;
   String? _selectedCategory;
   TimeOfDay? _selectedTime;
   TimeSlot? _selectedTimeSlot;
@@ -47,6 +52,19 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.habit.name);
+    _descriptionController = TextEditingController(text: widget.habit.description ?? '');
+    _selectedColor = widget.habit.color;
+    _selectedIcon = widget.habit.icon;
+    _selectedFrequency = widget.habit.frequency;
+    _selectedCategory = widget.habit.category;
+    _selectedTime = widget.habit.reminderTime;
+    _selectedTimeSlot = widget.habit.timeSlot;
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _descriptionController.dispose();
@@ -55,24 +73,28 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
 
   void _saveHabit() {
     if (_formKey.currentState!.validate()) {
-      final habit = Habit(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+      final updatedHabit = widget.habit.copyWith(
         name: _nameController.text,
         description: _descriptionController.text.isEmpty 
             ? null 
             : _descriptionController.text,
         color: _selectedColor,
         icon: _selectedIcon,
-        createdAt: DateTime.now(),
-        completedDates: [],
         frequency: _selectedFrequency,
         category: _selectedCategory,
         reminderTime: _selectedTime,
         timeSlot: _selectedTimeSlot,
       );
 
-      context.read<HabitProvider>().addHabit(habit);
+      context.read<HabitProvider>().updateHabit(widget.habit.id, updatedHabit);
       Navigator.pop(context);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Habit updated successfully!'),
+          backgroundColor: AppColors.success,
+        ),
+      );
     }
   }
 
@@ -105,7 +127,7 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('New Habit'),
+        title: const Text('Edit Habit'),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.pop(context),
@@ -330,10 +352,11 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
                       height: 48,
                       decoration: BoxDecoration(
                         color: color,
-                        shape: BoxShape.circle,
-                        border: isSelected
-                            ? Border.all(color: Colors.white, width: 3)
-                            : null,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected ? Colors.white : Colors.transparent,
+                          width: 3,
+                        ),
                       ),
                       child: isSelected
                           ? const Icon(Icons.check, color: Colors.white)
@@ -365,14 +388,19 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
                         color: isSelected
                             ? _selectedColor.withOpacity(0.2)
                             : AppColors.cardBackground,
-                        borderRadius: BorderRadius.circular(AppConstants.radiusM),
-                        border: isSelected
-                            ? Border.all(color: _selectedColor, width: 2)
-                            : null,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected 
+                              ? _selectedColor 
+                              : Colors.transparent,
+                          width: 2,
+                        ),
                       ),
                       child: Icon(
                         icon,
-                        color: isSelected ? _selectedColor : AppColors.textSecondary,
+                        color: isSelected 
+                            ? _selectedColor 
+                            : AppColors.textSecondary,
                       ),
                     ),
                   );
@@ -381,43 +409,22 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
 
               const SizedBox(height: AppConstants.spacingL),
 
-              // Frequency
+              // Frequency Selection
               Text(
                 'Frequency',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: AppConstants.spacingM),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.cardBackground,
-                  borderRadius: BorderRadius.circular(AppConstants.radiusM),
-                ),
-                child: Column(
-                  children: FrequencyType.values.map((frequency) {
-                    final isSelected = frequency == _selectedFrequency;
-                    return ListTile(
-                      title: Text(
-                        frequency == FrequencyType.daily
-                            ? 'Daily'
-                            : frequency == FrequencyType.weekly
-                                ? 'Weekly'
-                                : 'Custom',
-                        style: TextStyle(
-                          color: isSelected
-                              ? AppColors.primary
-                              : AppColors.textPrimary,
-                        ),
-                      ),
-                      trailing: isSelected
-                          ? const Icon(Icons.check, color: AppColors.primary)
-                          : null,
-                      onTap: () => setState(() => _selectedFrequency = frequency),
-                    );
-                  }).toList(),
-                ),
+              Wrap(
+                spacing: AppConstants.spacingM,
+                children: [
+                  _buildFrequencyChip('Daily', FrequencyType.daily),
+                  _buildFrequencyChip('Weekly', FrequencyType.weekly),
+                  _buildFrequencyChip('Custom', FrequencyType.custom),
+                ],
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: AppConstants.spacingXL),
             ],
           ),
         ),
@@ -439,6 +446,22 @@ class _AddHabitScreenState extends State<AddHabitScreen> {
       selected: isSelected,
       onSelected: (selected) {
         setState(() => _selectedTimeSlot = selected ? slot : null);
+      },
+      selectedColor: AppColors.primary,
+      backgroundColor: AppColors.cardBackground,
+      labelStyle: TextStyle(
+        color: isSelected ? Colors.white : AppColors.textPrimary,
+      ),
+    );
+  }
+
+  Widget _buildFrequencyChip(String label, FrequencyType frequency) {
+    final isSelected = _selectedFrequency == frequency;
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (selected) {
+        setState(() => _selectedFrequency = frequency);
       },
       selectedColor: AppColors.primary,
       backgroundColor: AppColors.cardBackground,

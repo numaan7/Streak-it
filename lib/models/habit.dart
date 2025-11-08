@@ -1,95 +1,65 @@
 import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart';
 
 class Habit {
   final String id;
   final String name;
   final String? description;
-  final String emoji;
+  final Color color;
+  final IconData icon;
   final DateTime createdAt;
   final List<DateTime> completedDates;
-  final String frequency; // daily, weekly, specific_days, no_repeat
-  final int targetDays; // for weekly habits
-  final Color color;
-  final String? category;
-  final Map<String, String> notes; // date -> note
-  final List<int>? specificDays; // List of weekday numbers (1=Monday, 7=Sunday)
-  final TimeOfDay? reminderTime; // Time for reminder
-  final bool showMorningReminder; // Show notification on phone unlock in morning (5 AM - 12 PM)
-  bool isArchived;
+  final String? reminder;
+  final TimeOfDay? reminderTime; // Time for notification
+  final FrequencyType frequency;
+  final int targetDays; // for weekly/monthly goals
+  final String? category; // Health, Productivity, Mindfulness, etc.
+  final Map<String, String> notes; // date -> note mapping
+  final bool isArchived;
+  final DateTime? archivedAt;
+  final TimeSlot? timeSlot; // Morning, Evening, or Anytime
 
   Habit({
-    String? id,
+    required this.id,
     required this.name,
     this.description,
-    this.emoji = '🎯',
-    DateTime? createdAt,
-    List<DateTime>? completedDates,
-    this.frequency = 'daily',
-    this.targetDays = 7,
     required this.color,
+    required this.icon,
+    required this.createdAt,
+    required this.completedDates,
+    this.reminder,
+    this.reminderTime,
+    this.frequency = FrequencyType.daily,
+    this.targetDays = 7,
     this.category,
     Map<String, String>? notes,
-    this.specificDays,
-    this.reminderTime,
-    this.showMorningReminder = false,
     this.isArchived = false,
-  })  : id = id ?? const Uuid().v4(),
-        createdAt = createdAt ?? DateTime.now(),
-        completedDates = completedDates ?? [],
-        notes = notes ?? {};
-
-  // Check if habit is scheduled for a specific date
-  bool isScheduledFor(DateTime date) {
-    switch (frequency) {
-      case 'daily':
-        return true;
-      case 'no_repeat':
-        return _isSameDay(date, createdAt);
-      case 'specific_days':
-        if (specificDays == null || specificDays!.isEmpty) return false;
-        final weekday = date.weekday; // 1=Monday, 7=Sunday
-        return specificDays!.contains(weekday);
-      default:
-        return true;
-    }
-  }
-
-  // Check if habit is completed today
-  bool get isCompletedToday {
-    final now = DateTime.now();
-    return completedDates.any((date) =>
-        date.year == now.year &&
-        date.month == now.month &&
-        date.day == now.day);
-  }
-
-  // Check if habit is scheduled for today
-  bool get isScheduledToday {
-    return isScheduledFor(DateTime.now());
-  }
+    this.archivedAt,
+    this.timeSlot,
+  }) : notes = notes ?? {};
 
   // Calculate current streak
   int get currentStreak {
     if (completedDates.isEmpty) return 0;
 
-    final sortedDates = List<DateTime>.from(completedDates)
+    final sortedDates = completedDates.map((d) => _normalizeDate(d)).toList()
       ..sort((a, b) => b.compareTo(a));
 
-    int streak = 0;
-    DateTime checkDate = _normalizeDate(DateTime.now());
-
-    // If not completed today, start from yesterday
-    if (!isCompletedToday) {
-      checkDate = checkDate.subtract(const Duration(days: 1));
+    final today = _normalizeDate(DateTime.now());
+    
+    // Check if completed today or yesterday to have an active streak
+    if (!sortedDates.contains(today) && 
+        !sortedDates.contains(today.subtract(const Duration(days: 1)))) {
+      return 0;
     }
 
+    int streak = 0;
+    DateTime currentDate = today;
+
     for (var date in sortedDates) {
-      final normalizedDate = _normalizeDate(date);
-      if (_isSameDay(normalizedDate, checkDate)) {
+      if (date == currentDate || date == currentDate.subtract(const Duration(days: 1))) {
         streak++;
-        checkDate = checkDate.subtract(const Duration(days: 1));
-      } else if (normalizedDate.isBefore(checkDate)) {
+        currentDate = date.subtract(const Duration(days: 1));
+      } else {
         break;
       }
     }
@@ -101,90 +71,85 @@ class Habit {
   int get longestStreak {
     if (completedDates.isEmpty) return 0;
 
-    final sortedDates = List<DateTime>.from(completedDates)
-      ..sort((a, b) => a.compareTo(b));
+    final sortedDates = completedDates.map((d) => _normalizeDate(d)).toList()
+      ..sort();
 
     int maxStreak = 1;
-    int currentStreak = 1;
+    int currentStreakCount = 1;
 
     for (int i = 1; i < sortedDates.length; i++) {
-      final prevDate = _normalizeDate(sortedDates[i - 1]);
-      final currentDate = _normalizeDate(sortedDates[i]);
-      final difference = currentDate.difference(prevDate).inDays;
-
-      if (difference == 1) {
-        currentStreak++;
-        maxStreak = currentStreak > maxStreak ? currentStreak : maxStreak;
-      } else if (difference > 1) {
-        currentStreak = 1;
+      final diff = sortedDates[i].difference(sortedDates[i - 1]).inDays;
+      
+      if (diff == 1) {
+        currentStreakCount++;
+        maxStreak = currentStreakCount > maxStreak ? currentStreakCount : maxStreak;
+      } else {
+        currentStreakCount = 1;
       }
     }
 
     return maxStreak;
   }
 
-  // Calculate completion rate (last 30 days)
-  double get completionRate {
-    final now = DateTime.now();
-    final thirtyDaysAgo = now.subtract(const Duration(days: 30));
-    
-    int daysInRange = 0;
-    int completedInRange = 0;
-
-    for (int i = 0; i < 30; i++) {
-      final checkDate = now.subtract(Duration(days: i));
-      if (checkDate.isAfter(createdAt) || _isSameDay(checkDate, createdAt)) {
-        daysInRange++;
-        if (completedDates.any((date) => _isSameDay(date, checkDate))) {
-          completedInRange++;
-        }
-      }
-    }
-
-    return daysInRange > 0 ? completedInRange / daysInRange : 0.0;
+  // Check if completed today
+  bool get isCompletedToday {
+    final today = _normalizeDate(DateTime.now());
+    return completedDates.any((date) => _normalizeDate(date) == today);
   }
 
   // Total completions
   int get totalCompletions => completedDates.length;
 
-  // Helper methods
+  // Completion rate (last 30 days)
+  double get completionRate {
+    final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
+    final recentCompletions = completedDates.where(
+      (date) => date.isAfter(thirtyDaysAgo)
+    ).length;
+    return (recentCompletions / 30) * 100;
+  }
+
   DateTime _normalizeDate(DateTime date) {
     return DateTime(date.year, date.month, date.day);
   }
 
-  bool _isSameDay(DateTime date1, DateTime date2) {
-    return date1.year == date2.year &&
-        date1.month == date2.month &&
-        date1.day == date2.day;
-  }
-
-  // Check if completed on a specific date
-  bool isCompletedOnDate(DateTime date) {
-    return completedDates.any((completedDate) => _isSameDay(completedDate, date));
-  }
-
-  // Toggle completion for today
-  void toggleToday() {
-    final now = DateTime.now();
-    final todayNormalized = _normalizeDate(now);
-
-    if (isCompletedToday) {
-      completedDates.removeWhere((date) => _isSameDay(date, now));
-    } else {
-      completedDates.add(todayNormalized);
-    }
-  }
-
-  // Add note for a specific date
-  void addNote(DateTime date, String note) {
-    final key = _normalizeDate(date).toIso8601String();
-    notes[key] = note;
-  }
-
-  // Get note for a specific date
-  String? getNote(DateTime date) {
-    final key = _normalizeDate(date).toIso8601String();
-    return notes[key];
+  // Copy with method
+  Habit copyWith({
+    String? id,
+    String? name,
+    String? description,
+    Color? color,
+    IconData? icon,
+    DateTime? createdAt,
+    List<DateTime>? completedDates,
+    String? reminder,
+    TimeOfDay? reminderTime,
+    FrequencyType? frequency,
+    int? targetDays,
+    String? category,
+    Map<String, String>? notes,
+    bool? isArchived,
+    DateTime? archivedAt,
+    TimeSlot? timeSlot,
+  }) {
+    return Habit(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      color: color ?? this.color,
+      icon: icon ?? this.icon,
+      createdAt: createdAt ?? this.createdAt,
+      completedDates: completedDates ?? this.completedDates,
+      reminder: reminder ?? this.reminder,
+      reminderTime: reminderTime ?? this.reminderTime,
+      frequency: frequency ?? this.frequency,
+      targetDays: targetDays ?? this.targetDays,
+      category: category ?? this.category,
+      notes: notes ?? this.notes,
+      isArchived: isArchived ?? this.isArchived,
+      archivedAt: archivedAt ?? this.archivedAt,
+      timeSlot: timeSlot ?? this.timeSlot,
+    );
   }
 
   // Convert to JSON
@@ -193,91 +158,76 @@ class Habit {
       'id': id,
       'name': name,
       'description': description,
-      'emoji': emoji,
+      'color': color.value,
+      'icon': icon.codePoint,
       'createdAt': createdAt.toIso8601String(),
       'completedDates': completedDates.map((d) => d.toIso8601String()).toList(),
-      'frequency': frequency,
+      'reminder': reminder,
+      'reminderTime': reminderTime != null 
+          ? '${reminderTime!.hour}:${reminderTime!.minute}' 
+          : null,
+      'frequency': frequency.toString(),
       'targetDays': targetDays,
-      'color': color.value,
       'category': category,
       'notes': notes,
-      'specificDays': specificDays,
-      'reminderTime': reminderTime != null
-          ? {'hour': reminderTime!.hour, 'minute': reminderTime!.minute}
-          : null,
-      'showMorningReminder': showMorningReminder,
       'isArchived': isArchived,
+      'archivedAt': archivedAt?.toIso8601String(),
+      'timeSlot': timeSlot?.toString(),
     };
   }
 
   // Create from JSON
   factory Habit.fromJson(Map<String, dynamic> json) {
-    TimeOfDay? reminderTime;
-    if (json['reminderTime'] != null) {
-      final timeData = json['reminderTime'] as Map<String, dynamic>;
-      reminderTime = TimeOfDay(
-        hour: timeData['hour'] as int,
-        minute: timeData['minute'] as int,
+    TimeOfDay? parseTime(String? timeStr) {
+      if (timeStr == null) return null;
+      final parts = timeStr.split(':');
+      return TimeOfDay(
+        hour: int.parse(parts[0]),
+        minute: int.parse(parts[1]),
       );
     }
 
     return Habit(
-      id: json['id'],
-      name: json['name'],
-      description: json['description'],
-      emoji: json['emoji'] ?? '🎯',
-      createdAt: DateTime.parse(json['createdAt']),
-      completedDates: (json['completedDates'] as List?)
-          ?.map((d) => DateTime.parse(d as String))
+      id: json['id'] as String,
+      name: json['name'] as String,
+      description: json['description'] as String?,
+      color: Color(json['color'] as int),
+      icon: IconData(json['icon'] as int, fontFamily: 'MaterialIcons'),
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      completedDates: (json['completedDates'] as List<dynamic>)
+          .map((d) => DateTime.parse(d as String))
           .toList(),
-      frequency: json['frequency'] ?? 'daily',
-      targetDays: json['targetDays'] ?? 7,
-      color: Color(json['color']),
-      category: json['category'],
-      notes: json['notes'] != null 
-          ? Map<String, String>.from(json['notes'])
-          : {},
-      specificDays: json['specificDays'] != null
-          ? List<int>.from(json['specificDays'])
+      reminder: json['reminder'] as String?,
+      reminderTime: parseTime(json['reminderTime'] as String?),
+      frequency: FrequencyType.values.firstWhere(
+        (e) => e.toString() == json['frequency'],
+        orElse: () => FrequencyType.daily,
+      ),
+      targetDays: json['targetDays'] as int? ?? 7,
+      category: json['category'] as String?,
+      notes: Map<String, String>.from(json['notes'] ?? {}),
+      isArchived: json['isArchived'] as bool? ?? false,
+      archivedAt: json['archivedAt'] != null 
+          ? DateTime.parse(json['archivedAt'] as String) 
           : null,
-      reminderTime: reminderTime,
-      showMorningReminder: json['showMorningReminder'] ?? false,
-      isArchived: json['isArchived'] ?? false,
+      timeSlot: json['timeSlot'] != null
+          ? TimeSlot.values.firstWhere(
+              (e) => e.toString() == json['timeSlot'],
+              orElse: () => TimeSlot.anytime,
+            )
+          : null,
     );
   }
+}
 
-  // Copy with method
-  Habit copyWith({
-    String? name,
-    String? description,
-    String? emoji,
-    List<DateTime>? completedDates,
-    String? frequency,
-    int? targetDays,
-    Color? color,
-    String? category,
-    Map<String, String>? notes,
-    List<int>? specificDays,
-    TimeOfDay? reminderTime,
-    bool? showMorningReminder,
-    bool? isArchived,
-  }) {
-    return Habit(
-      id: id,
-      name: name ?? this.name,
-      description: description ?? this.description,
-      emoji: emoji ?? this.emoji,
-      createdAt: createdAt,
-      completedDates: completedDates ?? List.from(this.completedDates),
-      frequency: frequency ?? this.frequency,
-      targetDays: targetDays ?? this.targetDays,
-      color: color ?? this.color,
-      category: category ?? this.category,
-      notes: notes ?? Map.from(this.notes),
-      specificDays: specificDays ?? this.specificDays,
-      reminderTime: reminderTime ?? this.reminderTime,
-      showMorningReminder: showMorningReminder ?? this.showMorningReminder,
-      isArchived: isArchived ?? this.isArchived,
-    );
-  }
+enum FrequencyType {
+  daily,
+  weekly,
+  custom,
+}
+
+enum TimeSlot {
+  morning,   // 5 AM - 9 AM
+  evening,   // 9 PM - 2 AM
+  anytime,   // No specific time
 }

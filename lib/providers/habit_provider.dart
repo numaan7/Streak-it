@@ -1,275 +1,244 @@
-import 'dart:async';
-import 'dart:convert';
-import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/material.dart';
 import '../models/habit.dart';
+import '../services/storage_service.dart';
 import '../services/notification_service.dart';
 
 class HabitProvider extends ChangeNotifier {
-  final NotificationService _notificationService = NotificationService();
-  
   List<Habit> _habits = [];
-  bool _isLoading = true;
+  bool _isLoading = false;
+  final StorageService _storageService;
+  final NotificationService _notificationService = NotificationService();
 
-  List<Habit> get habits => _habits.where((h) => !h.isArchived).toList();
-  List<Habit> get archivedHabits => _habits.where((h) => h.isArchived).toList();
+  HabitProvider(this._storageService) {
+    // Don't auto-load, let splash screen handle it
+    _initializeNotifications();
+  }
+
+  Future<void> _initializeNotifications() async {
+    try {
+      await _notificationService.initialize();
+    } catch (e) {
+      debugPrint('Notification init error: $e');
+    }
+  }
+
+  List<Habit> get habits => _habits;
   bool get isLoading => _isLoading;
 
-  HabitProvider() {
-    loadHabits();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
-  // Load habits from local storage (fallback)
+  // Load habits from storage
   Future<void> loadHabits() async {
-    debugPrint('╔═══════════════════════════════════════════╗');
-    debugPrint('║   LOAD OPERATION STARTED                  ║');
-    debugPrint('╚═══════════════════════════════════════════╝');
     _isLoading = true;
     notifyListeners();
 
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final habitsJson = prefs.getString('habits');
-
-      if (habitsJson != null) {
-        debugPrint('✅ Data found in SharedPreferences');
-        debugPrint('📝 JSON length: ${habitsJson.length} characters');
-        debugPrint('📄 First 200 chars: ${habitsJson.substring(0, habitsJson.length > 200 ? 200 : habitsJson.length)}...');
-        
-        final List<dynamic> decoded = jsonDecode(habitsJson);
-        debugPrint('📋 Decoded ${decoded.length} items from JSON');
-        
-        _habits = decoded.map((json) => Habit.fromJson(json)).toList();
-        debugPrint('✅ Converted to ${_habits.length} Habit objects');
-        debugPrint('');
-        debugPrint('📋 LOADED HABITS:');
-        for (int i = 0; i < _habits.length; i++) {
-          debugPrint('   ${i + 1}. ${_habits[i].name}');
-          debugPrint('      ID: ${_habits[i].id}');
-          debugPrint('      Archived: ${_habits[i].isArchived}');
-        }
-      } else {
-        debugPrint('⚠️ No saved habits found in SharedPreferences');
-      }
-    } catch (e) {
-      debugPrint('❌❌❌ ERROR LOADING HABITS: $e');
-      debugPrint('Stack: ${StackTrace.current}');
-    }
-
+    _habits = await _storageService.loadHabits();
+    
     _isLoading = false;
     notifyListeners();
-    debugPrint('╔═══════════════════════════════════════════╗');
-    debugPrint('║   LOAD OPERATION COMPLETE                 ║');
-    debugPrint('╚═══════════════════════════════════════════╝');
-  }
-
-  // Save habits to local storage
-  Future<void> _saveHabitsToLocal() async {
-    try {
-      debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      debugPrint('💾 SAVE OPERATION STARTED');
-      debugPrint('📋 Habits in memory: ${_habits.length}');
-      for (int i = 0; i < _habits.length; i++) {
-        debugPrint('   ${i + 1}. ${_habits[i].name} (ID: ${_habits[i].id})');
-      }
-      
-      final prefs = await SharedPreferences.getInstance();
-      final habitsList = _habits.map((h) => h.toJson()).toList();
-      final habitsJson = jsonEncode(habitsList);
-      
-      debugPrint('📝 JSON to save (${habitsJson.length} chars):');
-      debugPrint('   ${habitsJson.substring(0, habitsJson.length > 200 ? 200 : habitsJson.length)}...');
-      
-      final result = await prefs.setString('habits', habitsJson);
-      debugPrint('✅ SharedPreferences.setString returned: $result');
-      
-      // Verify the save by reading it back
-      final savedData = prefs.getString('habits');
-      if (savedData != null) {
-        final savedList = jsonDecode(savedData) as List;
-        debugPrint('✅ VERIFICATION SUCCESS: ${savedList.length} habits confirmed saved');
-        debugPrint('   Saved habit IDs: ${savedList.map((h) => h['id']).join(', ')}');
-      } else {
-        debugPrint('❌❌❌ VERIFICATION FAILED: No data found after save!');
-      }
-      debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    } catch (e) {
-      debugPrint('❌❌❌ ERROR IN SAVE: $e');
-      debugPrint('Stack: ${StackTrace.current}');
-    }
   }
 
   // Add new habit
   Future<void> addHabit(Habit habit) async {
     _habits.add(habit);
-    await _saveHabitsToLocal();
-    notifyListeners();
+    await _storageService.saveHabits(_habits);
     
     // Schedule notification if reminder time is set
     if (habit.reminderTime != null) {
-      await _notificationService.scheduleHabitReminder(habit);
+      final habitId = habit.id.hashCode;
+      await _notificationService.scheduleHabitReminder(
+        id: habitId,
+        habitId: habit.id,
+        habitName: habit.name,
+        time: habit.reminderTime!,
+        habitEmoji: _getHabitEmoji(habit),
+        description: habit.description,
+      );
     }
     
-    // Schedule morning reminder if enabled
-    if (habit.showMorningReminder) {
-      await _notificationService.scheduleMorningReminder(habit);
-    }
+    notifyListeners();
   }
 
-  // Update existing habit
-  Future<void> updateHabit(Habit updatedHabit) async {
-    debugPrint('╔════════════════════════════════════════════╗');
-    debugPrint('║   UPDATE OPERATION STARTED                 ║');
-    debugPrint('╚════════════════════════════════════════════╝');
-    debugPrint('✏️ Updating habit: ${updatedHabit.name}');
-    debugPrint('🆔 Looking for ID: ${updatedHabit.id}');
-    debugPrint('📋 Current habits in memory: ${_habits.length}');
-    
-    for (int i = 0; i < _habits.length; i++) {
-      debugPrint('   ${i + 1}. ${_habits[i].name} (ID: ${_habits[i].id})');
-      if (_habits[i].id == updatedHabit.id) {
-        debugPrint('      ✅ THIS IS THE MATCH!');
-      }
-    }
-    
-    // Cancel old notifications
-    await _notificationService.cancelHabitReminder(updatedHabit);
-    
-    final index = _habits.indexWhere((h) => h.id == updatedHabit.id);
-    debugPrint('📍 Index found: $index');
-    
+  String _getHabitEmoji(Habit habit) {
+    // Map icon to emoji
+    final iconMap = {
+      'favorite': '❤️',
+      'fitness_center': '💪',
+      'self_improvement': '🧘',
+      'local_drink': '💧',
+      'menu_book': '📚',
+      'directions_run': '🏃',
+      'spa': '🌸',
+      'nightlight': '🌙',
+      'wb_sunny': '☀️',
+      'restaurant': '🍽️',
+      'music_note': '🎵',
+      'palette': '🎨',
+      'code': '💻',
+      'camera_alt': '📷',
+      'savings': '💰',
+      'school': '🎓',
+      'cleaning_services': '🧹',
+      'pets': '🐾',
+      'forest': '🌲',
+      'water_drop': '💧',
+    };
+    return iconMap[habit.icon.toString()] ?? '🔥';
+  }
+
+  // Update habit
+  Future<void> updateHabit(String id, Habit updatedHabit) async {
+    final index = _habits.indexWhere((h) => h.id == id);
     if (index != -1) {
-      debugPrint('✅ Replacing habit at index $index');
-      debugPrint('   Old: ${_habits[index].name}');
-      debugPrint('   New: ${updatedHabit.name}');
-      
+      final oldHabit = _habits[index];
       _habits[index] = updatedHabit;
+      await _storageService.saveHabits(_habits);
       
-      debugPrint('🔄 Calling save...');
-      await _saveHabitsToLocal();
+      // Update notification
+      final habitId = id.hashCode;
+      if (updatedHabit.reminderTime != null) {
+        await _notificationService.scheduleHabitReminder(
+          id: habitId,
+          habitId: updatedHabit.id,
+          habitName: updatedHabit.name,
+          time: updatedHabit.reminderTime!,
+          habitEmoji: _getHabitEmoji(updatedHabit),
+          description: updatedHabit.description,
+        );
+      } else {
+        // Cancel if reminder was removed
+        await _notificationService.cancelHabitReminder(habitId);
+      }
       
-      debugPrint('� Calling notifyListeners...');
       notifyListeners();
-      
-      debugPrint('✅ UPDATE COMPLETE');
-    } else {
-      debugPrint('❌❌❌ HABIT NOT FOUND IN LIST!');
-      debugPrint('❌ Searched for ID: ${updatedHabit.id}');
-      debugPrint('❌ Available IDs: ${_habits.map((h) => h.id).join(", ")}');
-    }
-    debugPrint('╔════════════════════════════════════════════╗');
-    debugPrint('║   UPDATE OPERATION END                     ║');
-    debugPrint('╚════════════════════════════════════════════╝');
-    
-    // Schedule new notification if reminder time is set
-    if (updatedHabit.reminderTime != null) {
-      await _notificationService.scheduleHabitReminder(updatedHabit);
-    }
-    
-    // Schedule morning reminder if enabled
-    if (updatedHabit.showMorningReminder) {
-      await _notificationService.scheduleMorningReminder(updatedHabit);
     }
   }
 
   // Delete habit
-  Future<void> deleteHabit(String habitId) async {
-    debugPrint('╔════════════════════════════════════════════╗');
-    debugPrint('║   DELETE OPERATION STARTED                 ║');
-    debugPrint('╚════════════════════════════════════════════╝');
-    debugPrint('🗑️ Deleting habit with ID: $habitId');
-    debugPrint('📊 Habits before delete: ${_habits.length}');
-    
-    for (int i = 0; i < _habits.length; i++) {
-      debugPrint('   ${i + 1}. ${_habits[i].name} (ID: ${_habits[i].id})');
-      if (_habits[i].id == habitId) {
-        debugPrint('      ✅ THIS WILL BE DELETED!');
-      }
-    }
-    
-    try {
-      final habit = _habits.firstWhere((h) => h.id == habitId);
-      debugPrint('✅ Found habit to delete: ${habit.name}');
-      
-      // Cancel notifications for this habit
-      await _notificationService.cancelHabitReminder(habit);
-      
-      _habits.removeWhere((h) => h.id == habitId);
-      debugPrint('📊 Habits after delete: ${_habits.length}');
-      
-      debugPrint('🔄 Calling save...');
-      await _saveHabitsToLocal();
-      
-      debugPrint('� Calling notifyListeners...');
-      notifyListeners();
-      
-      debugPrint('✅ DELETE COMPLETE');
-    } catch (e) {
-      debugPrint('❌❌❌ Error deleting habit: $e');
-      debugPrint('Stack: ${StackTrace.current}');
-    }
-    debugPrint('╔════════════════════════════════════════════╗');
-    debugPrint('║   DELETE OPERATION END                     ║');
-    debugPrint('╚════════════════════════════════════════════╝');
-  }
-
-  // Toggle habit completion for today
-  Future<void> toggleHabitToday(String habitId) async {
-    final habit = _habits.firstWhere((h) => h.id == habitId);
-    habit.toggleToday();
-    
-    await _saveHabitsToLocal();
+  Future<void> deleteHabit(String id) async {
+    final habitId = id.hashCode;
+    await _notificationService.cancelHabitReminder(habitId);
+    _habits.removeWhere((h) => h.id == id);
+    await _storageService.saveHabits(_habits);
     notifyListeners();
   }
 
-  // Archive habit
-  Future<void> archiveHabit(String habitId) async {
-    final index = _habits.indexWhere((h) => h.id == habitId);
-    if (index != -1) {
-      final updatedHabit = _habits[index].copyWith(isArchived: true);
-      _habits[index] = updatedHabit;
-      await _saveHabitsToLocal();
-      notifyListeners();
+  // Toggle habit completion for today
+  Future<void> toggleHabitCompletion(String id) async {
+    final habitIndex = _habits.indexWhere((h) => h.id == id);
+    if (habitIndex == -1) return;
+
+    final habit = _habits[habitIndex];
+    final today = _normalizeDate(DateTime.now());
+    
+    List<DateTime> updatedDates = List.from(habit.completedDates);
+    
+    if (habit.isCompletedToday) {
+      // Remove today's completion
+      updatedDates.removeWhere((date) => _normalizeDate(date) == today);
+    } else {
+      // Add today's completion
+      updatedDates.add(DateTime.now());
     }
+
+    final updatedHabit = habit.copyWith(completedDates: updatedDates);
+    _habits[habitIndex] = updatedHabit;
+    
+    await _storageService.saveHabits(_habits);
+    notifyListeners();
   }
 
-  // Unarchive habit
-  Future<void> unarchiveHabit(String habitId) async {
-    final index = _habits.indexWhere((h) => h.id == habitId);
-    if (index != -1) {
-      final updatedHabit = _habits[index].copyWith(isArchived: false);
-      _habits[index] = updatedHabit;
-      await _saveHabitsToLocal();
-      notifyListeners();
-    }
+  // Get habits sorted by current streak
+  List<Habit> get habitsSortedByStreak {
+    final sortedHabits = List<Habit>.from(_habits);
+    sortedHabits.sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
+    return sortedHabits;
   }
 
-  // Get habit by id
-  Habit? getHabitById(String id) {
-    try {
-      return _habits.firstWhere((h) => h.id == id);
-    } catch (e) {
-      return null;
-    }
+  // Get active habits (with current streak > 0)
+  List<Habit> get activeHabits {
+    return _habits.where((h) => h.currentStreak > 0).toList();
   }
 
-  // Statistics
-  int get totalHabits => habits.length;
-  int get totalCompletionsToday =>
-      habits.where((h) => h.isCompletedToday).length;
-  
-  double get overallCompletionRate {
-    if (habits.isEmpty) return 0.0;
-    final rates = habits.map((h) => h.completionRate).toList();
-    return rates.reduce((a, b) => a + b) / rates.length;
-  }
-
+  // Get total streaks
   int get totalActiveStreaks {
-    return habits.fold(0, (sum, habit) => sum + habit.currentStreak);
+    return _habits.fold(0, (sum, habit) => sum + habit.currentStreak);
+  }
+
+  // Get completion rate today
+  double get todayCompletionRate {
+    if (_habits.isEmpty) return 0;
+    final completedToday = _habits.where((h) => h.isCompletedToday).length;
+    return (completedToday / _habits.length) * 100;
+  }
+
+  // Archive/Unarchive habit
+  Future<void> toggleArchiveHabit(String id) async {
+    final habitIndex = _habits.indexWhere((h) => h.id == id);
+    if (habitIndex == -1) return;
+
+    final habit = _habits[habitIndex];
+    final updatedHabit = habit.copyWith(
+      isArchived: !habit.isArchived,
+      archivedAt: !habit.isArchived ? DateTime.now() : null,
+    );
+    
+    _habits[habitIndex] = updatedHabit;
+    await _storageService.saveHabits(_habits);
+    notifyListeners();
+  }
+
+  // Add note to a habit completion
+  Future<void> addNoteToCompletion(String id, DateTime date, String note) async {
+    final habitIndex = _habits.indexWhere((h) => h.id == id);
+    if (habitIndex == -1) return;
+
+    final habit = _habits[habitIndex];
+    final dateKey = _normalizeDate(date).toIso8601String();
+    final updatedNotes = Map<String, String>.from(habit.notes);
+    updatedNotes[dateKey] = note;
+    
+    final updatedHabit = habit.copyWith(notes: updatedNotes);
+    _habits[habitIndex] = updatedHabit;
+    
+    await _storageService.saveHabits(_habits);
+    notifyListeners();
+  }
+
+  // Reorder habits
+  Future<void> reorderHabits(int oldIndex, int newIndex) async {
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    final habit = _habits.removeAt(oldIndex);
+    _habits.insert(newIndex, habit);
+    await _storageService.saveHabits(_habits);
+    notifyListeners();
+  }
+
+  // Complete habit from notification
+  Future<void> completeHabitFromNotification(String habitId) async {
+    final habit = _habits.firstWhere((h) => h.id == habitId, orElse: () => _habits.first);
+    if (habit.id == habitId) {
+      await toggleHabitCompletion(habitId);
+    }
+  }
+
+  // Snooze habit notification
+  Future<void> snoozeHabitNotification(String habitId, int minutes) async {
+    final habit = _habits.firstWhere((h) => h.id == habitId, orElse: () => _habits.first);
+    if (habit.id == habitId) {
+      final notificationId = habitId.hashCode;
+      await _notificationService.snoozeNotification(
+        id: notificationId,
+        habitId: habitId,
+        habitName: habit.name,
+        minutes: minutes,
+        habitEmoji: _getHabitEmoji(habit),
+        description: habit.description,
+      );
+    }
+  }
+
+  DateTime _normalizeDate(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
   }
 }
