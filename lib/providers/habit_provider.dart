@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import '../models/habit.dart';
 import '../services/storage_service.dart';
 import '../services/notification_service.dart';
+import '../services/widget_service.dart';
 
 class HabitProvider extends ChangeNotifier {
   List<Habit> _habits = [];
   bool _isLoading = false;
   final StorageService _storageService;
   final NotificationService _notificationService = NotificationService();
+  final WidgetService _widgetService = WidgetService();
 
   HabitProvider(this._storageService) {
     // Don't auto-load, let splash screen handle it
@@ -25,12 +27,22 @@ class HabitProvider extends ChangeNotifier {
   List<Habit> get habits => _habits;
   bool get isLoading => _isLoading;
 
+  // Update home screen widget
+  Future<void> _updateWidget() async {
+    try {
+      await _widgetService.updateWidget(_habits);
+    } catch (e) {
+      debugPrint('Widget update failed: $e');
+    }
+  }
+
   // Load habits from storage
   Future<void> loadHabits() async {
     _isLoading = true;
     notifyListeners();
 
     _habits = await _storageService.loadHabits();
+    await _updateWidget();
     
     _isLoading = false;
     notifyListeners();
@@ -54,6 +66,7 @@ class HabitProvider extends ChangeNotifier {
       );
     }
     
+    await _updateWidget();
     notifyListeners();
   }
 
@@ -108,6 +121,7 @@ class HabitProvider extends ChangeNotifier {
         await _notificationService.cancelHabitReminder(habitId);
       }
       
+      await _updateWidget();
       notifyListeners();
     }
   }
@@ -118,6 +132,7 @@ class HabitProvider extends ChangeNotifier {
     await _notificationService.cancelHabitReminder(habitId);
     _habits.removeWhere((h) => h.id == id);
     await _storageService.saveHabits(_habits);
+    await _updateWidget();
     notifyListeners();
   }
 
@@ -143,6 +158,7 @@ class HabitProvider extends ChangeNotifier {
     _habits[habitIndex] = updatedHabit;
     
     await _storageService.saveHabits(_habits);
+    await _updateWidget();
     notifyListeners();
   }
 
